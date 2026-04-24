@@ -7,14 +7,14 @@
 #
 
 # CHECK: curl is installed
-if [ ! command -v curl &> /dev/null ]
+if ! command -v curl &> /dev/null
 then
   echo "curl could not be found"
   exit 1
 fi
 
 # CHECK: jq is installed
-if [ ! command -v jq &> /dev/null ]
+if ! command -v jq &> /dev/null
 then
   echo "jq could not be found"
   exit 1
@@ -28,7 +28,7 @@ then
 fi
 
 # CHECK: valid FQDN is submitted
-if [ -z $(echo $1 | grep -P '(?=^.{1,254}$)(^(?>(?!\d+\.)[a-zA-Z0-9_\-]{1,63}\.?)+(?:[a-zA-Z]{2,})$)') ]
+if [ -z $(echo "$1" | grep -P '(?=^.{1,254}$)(^(?>(?!\d+\.)[a-zA-Z0-9_\-]{1,63}\.?)+(?:[a-zA-Z]{2,})$)') ]
 then
   echo "Invalid fully qualified domain name"
   exit 1
@@ -61,9 +61,10 @@ function valid_ip()
 }
 
 # Get current IP address
-if valid_ip $(curl -s -4 $GET_IP_WEBSITE)
+IP_NOW=$(curl -s -4 $GET_IP_WEBSITE)
+if valid_ip "$IP_NOW"
 then
-  IP_NOW=$(curl -s -4 $GET_IP_WEBSITE)
+  : # IP is valid, continue
 else
   # Exiting due to invalid IP address
   echo "Invalid IP address from $GET_IP_WEBSITE"
@@ -71,9 +72,10 @@ else
 fi
 
 # Get Porkbun DNS IP address
-if valid_ip $(curl -s -X POST -H "Content-Type: application/json" -d '{"apikey": "'"${API_KEY}"'", "secretapikey": "'"${SECRET_KEY}"'"}' "https://api.porkbun.com/api/json/v3/dns/retrieveByNameType/${DOMAIN}/A/${HOST}" | jq -r '.records[0].content')
+IP_PORKBUN=$(curl -s -X POST -H "Content-Type: application/json" -d '{"apikey": "'"${API_KEY}"'", "secretapikey": "'"${SECRET_KEY}"'"}' "https://api.porkbun.com/api/json/v3/dns/retrieveByNameType/${DOMAIN}/A/${HOST}" | jq -r '.records[0].content')
+if valid_ip "$IP_PORKBUN"
 then
-  IP_PORKBUN=$(curl -s -X POST -H "Content-Type: application/json" -d '{"apikey": "'"${API_KEY}"'", "secretapikey": "'"${SECRET_KEY}"'"}' "https://api.porkbun.com/api/json/v3/dns/retrieveByNameType/${DOMAIN}/A/${HOST}" | jq -r '.records[0].content')
+  : # IP is valid, continue
 else
   # Exiting due to invalid IP address
   echo "Invalid IP address from Porkbun API"
@@ -81,7 +83,7 @@ else
 fi
 
 # Check if the IP addresses match and change DNS entry if they don't
-if [ $IP_NOW == $IP_PORKBUN ]
+if [ "$IP_NOW" == "$IP_PORKBUN" ]
 then
   # They are the same, exiting
   echo "No update required"
