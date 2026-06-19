@@ -78,7 +78,7 @@ then
   : # IP is valid, continue
 else
   # Exiting due to invalid IP address
-  echo "Invalid IP address from Porkbun API"
+  echo "Invalid IP address ($IP_PORKBUN) from Porkbun API for ${DOMAIN}/A/${HOST}"
   exit 1
 fi
 
@@ -86,7 +86,6 @@ fi
 if [ "$IP_NOW" == "$IP_PORKBUN" ]
 then
   # They are the same, exiting
-  echo "No update required"
   exit 0
 else
   curl -s -X POST -H "Content-Type: application/json" -d '{"apikey": "'"${API_KEY}"'", "secretapikey": "'"${SECRET_KEY}"'", "content": "'"${IP_NOW}"'", "ttl": "1800"}' "https://api.porkbun.com/api/json/v3/dns/editByNameType/${DOMAIN}/A/${HOST}" > /dev/null
