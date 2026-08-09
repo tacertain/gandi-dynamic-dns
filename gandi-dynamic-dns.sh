@@ -7,14 +7,14 @@
 #
 
 # CHECK: curl is installed
-if [ ! command -v curl &> /dev/null ]
+if ! command -v curl &> /dev/null
 then
   echo "curl could not be found"
   exit 1
 fi
 
 # CHECK: jq is installed
-if [ ! command -v jq &> /dev/null ]
+if ! command -v jq &> /dev/null
 then
   echo "jq could not be found"
   exit 1
@@ -60,9 +60,10 @@ function valid_ip()
 }
 
 # Get current IP address
-if valid_ip $(curl -s -4 $GET_IP_WEBSITE)
+IP_NOW=$(curl -s -4 $GET_IP_WEBSITE)
+if valid_ip "$IP_NOW"
 then
-  IP_NOW=$(curl -s -4 $GET_IP_WEBSITE)
+  : # IP is valid, continue
 else
   # Exiting due to invalid IP address
   echo "Invalid IP address from $GET_IP_WEBSITE"
@@ -70,12 +71,13 @@ else
 fi
 
 # Get Gandi DNS IP address
-if valid_ip $(curl -s -H "Authorization: Apikey $API_KEY" -X GET https://api.gandi.net/v5/livedns/domains/$DOMAIN/records/$HOST/A | jq -r '.rrset_values[0]')
+IP_GANDI=$(curl -s -H "Authorization: Apikey $API_KEY" -X GET https://api.gandi.net/v5/livedns/domains/$DOMAIN/records/$HOST/A | jq -r '.rrset_values[0]')
+if valid_ip "$IP_GANDI"
 then
-  IP_GANDI=$(curl -s -H "Authorization: Apikey $API_KEY" -X GET https://api.gandi.net/v5/livedns/domains/$DOMAIN/records/$HOST/A | jq -r '.rrset_values[0]')
+  : # IP is valid, continue
 else
   # Exiting due to invalid IP address
-  echo "Invalid IP address from Gandi API"
+  echo "Invalid IP address ($IP_GANDI) from Gandi API for ${DOMAIN}/${HOST}/A"
   exit 1
 fi
 
@@ -86,12 +88,27 @@ then
   echo "No update required"
   exit 0
 else
-  curl -s -H "Authorization: Apikey $API_KEY" -H "Content-Type: application/json" -d '{"rrset_values": ["'${IP_NOW}'"], "rrset_ttl": 1800}' -X PUT https://api.gandi.net/v5/livedns/domains/"${DOMAIN}"/records/"${HOST}"/A > /dev/null
+  RESPONSE=$(curl -s -w '\n%{http_code}' -H "Authorization: Apikey $API_KEY" -H "Content-Type: application/json" -d '{"rrset_values": ["'${IP_NOW}'"], "rrset_ttl": 1800}' -X PUT https://api.gandi.net/v5/livedns/domains/"${DOMAIN}"/records/"${HOST}"/A)
   if [ "$?" -ne 0 ]
   then
     echo "There was a problem running the LiveDNS update command"
     exit 1
-  else
-    echo "DNS record updated"
   fi
+
+  # curl exits 0 when it successfully receives an HTTP error such as 401 or
+  # 403, so the response code has to be checked separately or a rejected
+  # update looks identical to a successful one.
+  HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+  BODY=$(echo "$RESPONSE" | sed '$d')
+  case "$HTTP_CODE" in
+    2[0-9][0-9])
+      : # Updated, continue
+      ;;
+    *)
+      echo "LiveDNS rejected the update (HTTP ${HTTP_CODE:-none}): $(echo "$BODY" | jq -r '.message // .cause // "no message"' 2>/dev/null || echo "no message")"
+      exit 1
+      ;;
+  esac
+
+  echo "DNS record updated"
 fi
