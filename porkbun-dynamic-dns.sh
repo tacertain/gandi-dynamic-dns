@@ -88,12 +88,21 @@ then
   # They are the same, exiting
   exit 0
 else
-  curl -s -X POST -H "Content-Type: application/json" -d '{"apikey": "'"${API_KEY}"'", "secretapikey": "'"${SECRET_KEY}"'", "content": "'"${IP_NOW}"'", "ttl": "1800"}' "https://api.porkbun.com/api/json/v3/dns/editByNameType/${DOMAIN}/A/${HOST}" > /dev/null
+  RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -d '{"apikey": "'"${API_KEY}"'", "secretapikey": "'"${SECRET_KEY}"'", "content": "'"${IP_NOW}"'", "ttl": "1800"}' "https://api.porkbun.com/api/json/v3/dns/editByNameType/${DOMAIN}/A/${HOST}")
   if [ "$?" -ne 0 ]
   then
     echo "There was a problem running the Porkbun DNS update command"
     exit 1
-  else
-    echo "DNS record updated"
   fi
+
+  # Porkbun answers HTTP 200 with {"status":"ERROR"} for application-level
+  # failures such as a bad key or a record that does not exist, so curl's exit
+  # status alone does not tell us the record was actually updated.
+  if [ "$(echo "$RESPONSE" | jq -r '.status')" != "SUCCESS" ]
+  then
+    echo "Porkbun rejected the update: $(echo "$RESPONSE" | jq -r '.message // "no message"')"
+    exit 1
+  fi
+
+  echo "DNS record updated"
 fi
